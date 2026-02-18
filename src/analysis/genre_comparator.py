@@ -1,0 +1,1 @@
+"""Comparación entre géneros."""
