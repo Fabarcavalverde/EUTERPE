@@ -7,7 +7,7 @@ output: github_document
 
 # 1. Introducción
 
-EUTERPE es un proyecto de Procesamiento de Lenguaje Natural (PLN) enfocado en el análisis morfosintáctico de letras musicales pertenecientes al Billboard Top 100.  
+EUTERPE es un proyecto de Procesamiento de Lenguaje Natural (PLN) enfocado en el análisis morfosintáctico de letras musicales pertenecientes al Billboard Top 100 de los ultimos 52 años.
 
 El estudio utiliza técnicas de Part-of-Speech Tagging (POS Tagging) para identificar patrones gramaticales, estructuras lingüísticas dominantes y posibles tendencias temporales en canciones populares.
 
@@ -25,7 +25,6 @@ Aplicar técnicas de POS Tagging para analizar la estructura morfosintáctica de
 
 - Implementar POS Tagging utilizando NLTK y spaCy.
 - Analizar la distribución de categorías gramaticales.
-- Comparar estructuras lingüísticas entre canciones.
 - Evaluar tendencias temporales en la complejidad gramatical.
 - Generar visualizaciones interpretables.
 
@@ -54,15 +53,7 @@ EUTERPE/
 ├── requirements.txt # Dependencias del proyecto  
 ├── USO_DE_IA.md # Documentación uso de IA  
 ├── README.Rmd # Documentación principal  
-└── .gitignoreEUTERPE/  
-├── dashboard/ # Aplicación de visualización  
-├── data/ # Datos crudos y procesados  
-├── src/ # Scripts de procesamiento  
-├── tests.ipynb # Notebook exploratorio  
-├── requirements.txt # Dependencias del proyecto  
-├── USO_DE_IA.md # Documentación uso de IA  
-├── README.Rmd # Documentación principal  
-└── .gitignore
+
 
 
 
