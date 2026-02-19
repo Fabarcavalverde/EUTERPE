@@ -11,8 +11,6 @@ from src.utils.config import RAW_DATA_PATH, PROCESSED_DATA_PATH
 
 
 INPUT_CSV = RAW_DATA_PATH / "top100_songs_with_lyrics.csv"
-OUTPUT_CSV = PROCESSED_DATA_PATH / "songs_with_lyrics_clean.csv"
-
 
 def clean_lyrics(text: str) -> str | None:
 
@@ -59,14 +57,7 @@ def run() -> pd.DataFrame:
 
     df = df[["year", "rank", "artist", "song", "lyrics"]]
 
-    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(OUTPUT_CSV, index=False, encoding="utf-8")
-
-    print(f"Cleaned file saved to: {OUTPUT_CSV}")
-    print(f"Non-null lyrics: {df['lyrics'].notna().sum()}")
-
     return df
-
 
 if __name__ == "__main__":
     run()

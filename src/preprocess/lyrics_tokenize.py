@@ -1,59 +1,27 @@
 """
-Lyrics Tokenizer (Parquet Version).
+Lyrics Tokenizer (in-memory).
 
-Este módulo forma parte del pipeline de preprocesamiento NLP.
+Recibe un DataFrame con lyrics (texto) y sobrescribe la columna `lyrics`
+con lista de tokens.
 
-Lee el dataset limpio de lyrics desde PROCESSED_DATA_PATH,
-tokeniza el texto y sobrescribe la columna `lyrics`
-con una lista real de tokens.
-
-El resultado se guarda en formato Parquet para permitir
-almacenamiento eficiente de listas y compatibilidad
-con etapas posteriores.
-
-Pipeline stage:
-    RAW → CLEAN → TOKENIZED
-
-Input:
-    processed/songs_with_lyrics_clean.csv
-
-Output:
-    processed/songs_with_lyrics_tokenized.parquet
-
-Requiere:
-    pip install pyarrow
+Opcional:
+- Guarda un parquet tokenizado si se provee `output_path`.
 """
 
 from __future__ import annotations
-
+from pathlib import Path
 import re
 import pandas as pd
+
 from src.utils.config import PROCESSED_DATA_PATH
 
 
-INPUT_FILE = PROCESSED_DATA_PATH / "songs_with_lyrics_clean.csv"
-OUTPUT_FILE = PROCESSED_DATA_PATH / "songs_with_lyrics_tokenized.parquet"
+OUTPUT_DEFAULT = PROCESSED_DATA_PATH / "songs_with_lyrics_tokenized.parquet"
 
-# Regex de tokenización:
-# - Letras (incluye acentos)
-# - Números
-# - Underscore (por robustez)
 _TOKEN_RE = re.compile(r"[A-Za-zÀ-ÿ0-9_]+")
 
 
 def tokenize(text: str) -> list[str] | None:
-    """
-    Convierte un string en lista de tokens.
-
-    Parameters
-    ----------
-    text : str
-
-    Returns
-    -------
-    list[str] | None
-    """
-
     if pd.isna(text):
         return None
 
@@ -61,52 +29,24 @@ def tokenize(text: str) -> list[str] | None:
     if not s:
         return None
 
-    # Lowercase recomendado para NLP tradicional
     s = s.lower()
-
     tokens = _TOKEN_RE.findall(s)
-
     return tokens if tokens else None
 
 
-def run(
-    input_path=INPUT_FILE,
-    output_path=OUTPUT_FILE
-) -> pd.DataFrame:
-    """
-    Ejecuta el proceso de tokenización.
+def run(df: pd.DataFrame, output_path: Path | None = OUTPUT_DEFAULT) -> pd.DataFrame:
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("run() expects a pandas DataFrame")
 
-    Parameters
-    ----------
-    input_path : Path
-        Ruta del CSV limpio.
-    output_path : Path
-        Ruta de salida en formato Parquet.
+    if "lyrics" not in df.columns:
+        raise ValueError("Column 'lyrics' not found")
 
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame tokenizado.
-    """
+    out = df.copy()
+    out["lyrics"] = out["lyrics"].apply(tokenize)
 
-    df = pd.read_csv(input_path, encoding="utf-8")
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        out.to_parquet(output_path, index=False)
+        print(f"DataSet tokenizado y guardado en: {output_path}")
 
-    required = {"year", "rank", "artist", "song", "lyrics"}
-    missing = required - set(df.columns)
-
-    if missing:
-        raise ValueError(f"Missing required columns: {sorted(missing)}")
-
-    df["lyrics"] = df["lyrics"].apply(tokenize)
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(output_path, index=False)
-
-    print(f"Tokenized dataset saved to: {output_path}")
-    print(f"Rows with tokens: {df['lyrics'].notna().sum()}")
-
-    return df
-
-
-if __name__ == "__main__":
-    run()
+    return out

@@ -1,0 +1,3 @@
+model,time_seconds,tokens,tokens_per_second
+NLTK (Penn -> Universal),26.734778899990488,920240,34421.08137278545
+spaCy (Universal),70.48780760000227,954598,13542.739269421812

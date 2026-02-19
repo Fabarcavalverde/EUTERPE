@@ -37,7 +37,10 @@ def tag_tokens(tokens):
     # Convertir explícitamente a lista
     tokens = list(tokens)
 
-    return nltk.pos_tag(tokens)
+    tagged = nltk.pos_tag(tokens)
+
+    # Convertir tuplas a listas (más compatible con Arrow)
+    return [[token, tag] for token, tag in tagged]
 
 
 def run(input_path: Path = INPUT_FILE, output_path: Path = OUTPUT_FILE) -> pd.DataFrame:

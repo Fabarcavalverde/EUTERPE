@@ -1,82 +1,167 @@
 """
-POS Comparator.
-
-Compara NLTK vs spaCy:
-- Distribución de tags
-- Coincidencia token-a-token (cuando el texto coincide)
-
-Guarda un CSV resumen en data/results.
+Comparador NLTK vs spaCy
+- Penn Treebank → Universal (NLTK)
+- Universal POS (spaCy)
+- Comparación por año
+- Comparación de velocidad
 """
 
-from __future__ import annotations
-from pathlib import Path
+import time
 from collections import Counter
+
 import pandas as pd
+import nltk
+import spacy
+from nltk import word_tokenize, pos_tag
+from nltk.tag.mapping import map_tag
 
-from src.utils.config import RESULTS_DATA_PATH
-
-
-NLTK_FILE = RESULTS_DATA_PATH / "pos_nltk.parquet"
-SPACY_FILE = RESULTS_DATA_PATH / "pos_spacy.parquet"
-OUT_SUMMARY = RESULTS_DATA_PATH / "pos_compare_summary.csv"
-
-
-def _flatten(tagged):
-    if tagged is None or (isinstance(tagged, float) and pd.isna(tagged)):
-        return []
-    return tagged
+# IMPORTAR RUTAS DEL PROYECTO
 
 
-def run(
-    nltk_path: Path = NLTK_FILE,
-    spacy_path: Path = SPACY_FILE,
-    out_path: Path = OUT_SUMMARY
-) -> pd.DataFrame:
+from src.utils.config import (
+    LYRICS_CLEAN_PARQUET,
+    POS_COMPARISON_BY_YEAR_CSV,
+    POS_SPEED_COMPARISON_CSV,
+)
 
-    df_n = pd.read_parquet(nltk_path)
-    df_s = pd.read_parquet(spacy_path)
+TEXT_COL = "lyrics"
+YEAR_COL = "year"
+MAX_ROWS = 3000
 
-    keys = ["year", "rank", "artist", "song"]
-    df = df_n[keys + ["pos_nltk"]].merge(df_s[keys + ["pos_spacy"]], on=keys, how="inner")
 
-    # Distribución de tags
-    nltk_tags = Counter()
-    spacy_tags = Counter()
+# FUNCIONES
 
-    matches = 0
-    total_compared = 0
+def nltk_universal(text: str) -> Counter:
+    tokens = word_tokenize(text)
+    tagged = pos_tag(tokens)  # Penn Treebank
+    universal = [map_tag("en-ptb", "universal", tag) for _, tag in tagged]
+    return Counter(universal)
 
-    for row in df.itertuples(index=False):
-        n = _flatten(row.pos_nltk)
-        s = _flatten(row.pos_spacy)
 
-        nltk_tags.update([tag for _, tag in n])
-        spacy_tags.update([tag for _, tag in s])
+def spacy_universal(nlp, text: str) -> Counter:
+    doc = nlp(text)
+    return Counter([token.pos_ for token in doc if not token.is_space])
 
-        # comparación token-a-token solo si hay misma longitud
-        if len(n) == len(s) and len(n) > 0:
-            for (tok_n, tag_n), (tok_s, tag_s) in zip(n, s):
-                if tok_n == tok_s:
-                    total_compared += 1
-                    if tag_n == tag_s:
-                        matches += 1
 
-    agreement = (matches / total_compared) if total_compared else 0.0
+def normalize(counter: Counter) -> dict:
+    total = sum(counter.values())
+    return {k: v / total for k, v in counter.items()} if total > 0 else {}
 
-    summary = pd.DataFrame([
-        {"metric": "rows_compared", "value": len(df)},
-        {"metric": "token_tag_agreement_exact_token_match", "value": agreement},
-        {"metric": "nltk_unique_tags", "value": len(nltk_tags)},
-        {"metric": "spacy_unique_tags", "value": len(spacy_tags)},
+
+
+# RUN PRINCIPAL (importable)
+
+
+def run():
+
+    # Descargar recursos NLTK si no están
+    nltk.download("punkt", quiet=True)
+    nltk.download("averaged_perceptron_tagger", quiet=True)
+    nltk.download("universal_tagset", quiet=True)
+
+    # Leer parquet desde config
+    df = pd.read_parquet(LYRICS_CLEAN_PARQUET)
+    df = df[[YEAR_COL, TEXT_COL]].dropna()
+
+    if MAX_ROWS:
+        df = df.head(MAX_ROWS)
+
+    # spaCy sin parser/ner (más rápido)
+    nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+
+    nltk_year_pos = {}
+    spacy_year_pos = {}
+
+    total_tokens_nltk = 0
+    total_tokens_spacy = 0
+
+
+    # NLTK
+
+
+    start = time.perf_counter()
+
+    for year, group in df.groupby(YEAR_COL):
+        counter = Counter()
+        for text in group[TEXT_COL]:
+            c = nltk_universal(text)
+            counter.update(c)
+            total_tokens_nltk += sum(c.values())
+        nltk_year_pos[year] = normalize(counter)
+
+    nltk_time = time.perf_counter() - start
+    nltk_speed = total_tokens_nltk / nltk_time if nltk_time > 0 else 0
+
+
+    # spaCy
+
+
+    start = time.perf_counter()
+
+    for year, group in df.groupby(YEAR_COL):
+        counter = Counter()
+        for text in group[TEXT_COL]:
+            c = spacy_universal(nlp, text)
+            counter.update(c)
+            total_tokens_spacy += sum(c.values())
+        spacy_year_pos[year] = normalize(counter)
+
+    spacy_time = time.perf_counter() - start
+    spacy_speed = total_tokens_spacy / spacy_time if spacy_time > 0 else 0
+
+
+    # Guardar comparación POS
+
+
+    all_pos = set()
+    for d in nltk_year_pos.values():
+        all_pos.update(d.keys())
+    for d in spacy_year_pos.values():
+        all_pos.update(d.keys())
+
+    results = []
+
+    for year in sorted(df[YEAR_COL].unique()):
+        for pos in all_pos:
+            nltk_freq = nltk_year_pos.get(year, {}).get(pos, 0)
+            spacy_freq = spacy_year_pos.get(year, {}).get(pos, 0)
+
+            results.append({
+                "year": year,
+                "pos": pos,
+                "nltk_freq": nltk_freq,
+                "spacy_freq": spacy_freq,
+                "abs_diff": abs(nltk_freq - spacy_freq)
+            })
+
+    pos_df = pd.DataFrame(results)
+    pos_df.to_csv(POS_COMPARISON_BY_YEAR_CSV, index=False)
+
+
+    # Guardar comparación de velocidad
+
+
+    speed_df = pd.DataFrame([
+        {
+            "model": "NLTK (Penn -> Universal)",
+            "time_seconds": nltk_time,
+            "tokens": total_tokens_nltk,
+            "tokens_per_second": nltk_speed
+        },
+        {
+            "model": "spaCy (Universal)",
+            "time_seconds": spacy_time,
+            "tokens": total_tokens_spacy,
+            "tokens_per_second": spacy_speed
+        }
     ])
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    summary.to_csv(out_path, index=False, encoding="utf-8")
-    print(f"Saved summary to: {out_path}")
+    speed_df.to_csv(POS_SPEED_COMPARISON_CSV, index=False)
 
-    return summary
+    print("Comparacion del POst Taggin guardada en:", POS_COMPARISON_BY_YEAR_CSV)
+    print("Comparacion de la velocidad guardada en:", POS_SPEED_COMPARISON_CSV)
+
 
 
 if __name__ == "__main__":
     run()
-

@@ -1,1 +1,0 @@
-"""Ejecutar POS tagging."""
